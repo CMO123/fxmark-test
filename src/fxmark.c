@@ -215,10 +215,14 @@ int main(int argc, char *argv[])
 	}
 
 	/* create, initialize, and run a bench */ 
-	bench = alloc_bench(opt.ncore, opt.nbg);
-	init_bench(bench, &opt);
-	run_bench(bench);
-	report_bench(bench, stdout);
+//fprintf(stdout,"before alloc_bench()\n");
+	bench = alloc_bench(opt.ncore, opt.nbg);//分配bench和其中ncpu个worker结构的共享内存空间
+//fprintf(stdout,"before init_bench()\n");
+	init_bench(bench, &opt);//根据参数，填充bench结构中的duration、directio等参数
+//fprintf(stdout,"before run_bench()\n");
+	run_bench(bench);//run_bench出错
+//fprintf(stdout,"before report_bench()\n");
+	report_bench(bench, stdout);//最后，当测试完成后，每个子进程将各自完成的操作数记录在各自的worker结构实例中，report_bench()进行结果汇总
 
 	return 0;
 }

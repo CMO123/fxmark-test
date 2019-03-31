@@ -1,0 +1,1 @@
+./fxmark --type DWOL --ncore 5 --nbg 0 --duration 30 --directio 0 --root /root/fxmark/fxmark/bin/root --profbegin "/root/fxmark/fxmark/bin/perfmon.py start" --profend "/root/fxmark/fxmark/bin/perfmon.py stop" --proflog /root/fxmark/fxmark/logs/ssd.ext4.DWOL.5.pm

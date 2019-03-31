@@ -27,7 +27,7 @@ class Runner(object):
     LOOPDEV = "/dev/loopX"
     NVMEDEV = "/dev/nvme0n1pX"
     HDDDEV  = "/dev/sdX"
-    SSDDEV  = "/dev/sdY"
+    SSDDEV  = "/dev/mydevice"
 
     # test core granularity
     CORE_FINE_GRAIN   = 0
@@ -53,7 +53,8 @@ class Runner(object):
 #        self.FS_TYPES      = ["tmpfs",
                               "ext4", "ext4_no_jnl",
                               "xfs",
-                              "btrfs", "f2fs",
+                              "btrfs", 
+                              # "f2fs",
                               # "jfs", "reiserfs", "ext2", "ext3",
         ]
         self.BENCH_TYPES   = [
@@ -166,6 +167,7 @@ class Runner(object):
         self.umount_hook = []
         self.active_ncore = -1
 
+# 输出log的初始配置信息
     def log_start(self):
         self.log_dir = os.path.normpath(
             os.path.join(CUR_DIR, self.LOGD_NAME,
@@ -194,14 +196,14 @@ class Runner(object):
         self.log("### CORE_PER_CHIP  = %s" % cpupol.CORE_PER_CHIP)
         self.log("### SMT_LEVEL      = %s" % cpupol.SMT_LEVEL)
         self.log("\n")
-
+#关闭log的句柄log_fd
     def log_end(self):
         self.log_fd.close()
-
+#将log写入log_fd中并打印到屏幕
     def log(self, log):
         self.log_fd.write((log+'\n').encode('utf-8'))
         print(log)
-
+#得到所有需要测试的core个数，得到1,2,3...
     def get_ncores(self):
         hw_thr_cnts_map = {
             Runner.CORE_FINE_GRAIN:cpupol.test_hw_thr_cnts_fine_grain,
@@ -215,21 +217,22 @@ class Runner(object):
                 break
             ncores.append(n)
         return ncores
-
+#开子进程执行cmd语句
     def exec_cmd(self, cmd, out=None):
         p = subprocess.Popen(cmd, shell=True, stdout=out, stderr=out)
         p.wait()
         return p
-
+#-v 重置免密输入时间
     def keep_sudo(self):
         self.exec_cmd("sudo -v", self.dev_null)
-
+#调用bin/drop-caches去清除缓存
     def drop_caches(self):
         cmd = ' '.join(["sudo", 
                         os.path.normpath(
                             os.path.join(CUR_DIR, "drop-caches"))])
+        #print(cmd)
         self.exec_cmd(cmd, self.dev_null)
-
+#调用bin/set-cpus设置CPU
     def set_cpus(self, ncore):
         if self.active_ncore == ncore:
             return
@@ -237,7 +240,7 @@ class Runner(object):
         if ncore is 0:
             ncores = "all"
         else:
-            ncores = ','.join(map(lambda c: str(c), cpupol.seq_cores[0:ncore]))
+            ncores = ','.join(map(lambda c: str(c), cpupol.seq_cores[0:ncore]))#如果ncore=10，得到0,1,2,...,10
         cmd = ' '.join(["sudo", 
                         os.path.normpath(
                             os.path.join(CUR_DIR, "set-cpus")), 
@@ -253,7 +256,7 @@ class Runner(object):
     def prepre_work(self, ncore):
         self.keep_sudo()
         self.exec_cmd("sudo sh -c \"echo 0 >/proc/sys/kernel/lock_stat\"",
-                      self.dev_null)
+                      self.dev_null)    # Disable collection of statistics:
         self.drop_caches()
         self.exec_cmd("sync", self.dev_null)
         self.set_cpus(ncore)
@@ -267,7 +270,7 @@ class Runner(object):
 
     def unset_loopdev(self):
         self.exec_cmd(' '.join(["sudo", "losetup", "-d", Runner.LOOPDEV]),
-                      self.dev_null)
+                      self.dev_null)    #卸载某个loopdev
 
     def umount(self, where):
         while True:
@@ -277,6 +280,7 @@ class Runner(object):
         (umount_hook, self.umount_hook) = (self.umount_hook, [])
         map(lambda hook: hook(), umount_hook);
 
+#初始化各个设备，这里初始话mem_disk
     def init_mem_disk(self):
         self.unset_loopdev()
         self.umount(self.tmp_path)
@@ -297,7 +301,7 @@ class Runner(object):
     def deinit_mem_disk(self):
         self.unset_loopdev()
         self.umount(self.tmp_path)
-
+# 以下，检查各个设备是否存在
     def init_nvme_disk(self):
         return (os.path.exists(Runner.NVMEDEV), Runner.NVMEDEV)
 
@@ -306,14 +310,14 @@ class Runner(object):
 
     def init_hdd_disk(self):
         return (os.path.exists(Runner.HDDDEV), Runner.HDDDEV)
-
+# 初始化特定设备media，即检查是否存在
     def init_media(self, media):
         _init_media = self.HOWTO_INIT_MEDIA.get(media, None)
         if not _init_media:
             return (False, None)
         (rc, dev_path) = _init_media()
         return (rc, dev_path)
-
+# 定义各个文件系统的挂载方式
     def mount_tmpfs(self, media, fs, mnt_path):
         p = self.exec_cmd("sudo mount -t tmpfs -o mode=0777,size="
                           + self.DISK_SIZE + " none " + mnt_path,
@@ -367,7 +371,7 @@ class Runner(object):
         if p.returncode is not 0:
             return False
         return True
-
+# 挂载特定fs到media上
     def mount(self, media, fs, mnt_path):
         mount_fn = self.HOWTO_MOUNT.get(fs, None)
         if not mount_fn:
@@ -376,15 +380,15 @@ class Runner(object):
         self.umount(mnt_path)
         self.exec_cmd("mkdir -p " + mnt_path, self.dev_null)
         return mount_fn(media, fs, mnt_path)
-
+#检查key1和key2是否匹配
     def _match_config(self, key1, key2):
-        for (k1, k2) in zip(key1, key2):
+        for (k1, k2) in zip(key1, key2):    #zip将对象中对应的元素打包成一个个元组，然后返回由这些元组组成的列表。(key1[0],key2[0]),(key1[1],key2[1])....
             if k1 == "*" or k2 == "*":
                 continue
             if k1 != k2:
                 return False
         return True
-
+#根据run_config参数生成配置
     def gen_config(self):
         for ncore in sorted(self.ncores, reverse=True):
             for bench in self.BENCH_TYPES:
@@ -399,13 +403,13 @@ class Runner(object):
                             if self._match_config(self.FILTER, \
                                                   (media, fs, bench, str(ncore), dio)):
                                 yield(media, fs, bench, ncore, dio)
-
+#fxmark_env环境变量设置
     def fxmark_env(self):
         env = ' '.join(["PERFMON_LEVEL=%s" % self.PERFMON_LEVEL,
                         "PERFMON_LDIR=%s"  % self.log_dir,
                         "PERFMON_LFILE=%s" % self.perfmon_log])
         return env
-
+#返回二进制执行代码的路径和bench
     def get_bin_type(self, bench):
         if bench.startswith("filebench_"):
             return (self.filebench_path, bench[len("filebench_"):])
@@ -438,6 +442,8 @@ class Runner(object):
                         "--profbegin", "\"%s\"" % self.perfmon_start,
                         "--profend",   "\"%s\"" % self.perfmon_stop,
                         "--proflog", self.perfmon_log])
+        print("fxmark run cmd:\n")
+        print(cmd)
         p = self.exec_cmd(cmd, self.redirect)
         if self.redirect:
             for l in p.stdout.readlines():
@@ -455,8 +461,9 @@ class Runner(object):
             cnt = -1
             self.log_start()
             for (cnt, (media, fs, bench, ncore, dio)) in enumerate(self.gen_config()):
-                (ncore, nbg) = self.add_bg_worker_if_needed(bench, ncore)
-                nfg = ncore - nbg
+                print("run: (cnt,(media,fs,bench,ncore,dio)) = (%d, ( %s, %s, %s, %s, %s))" %(cnt, media, fs, bench, ncore, dio))
+                (ncore, nbg) = self.add_bg_worker_if_needed(bench, ncore)   #(ncore, 0)
+                nfg = ncore - nbg   #nfg = ncore
 
                 if self.DRYRUN:
                     self.log("## %s:%s:%s:%s:%s" % (media, fs, bench, nfg, dio))
@@ -494,6 +501,7 @@ def confirm_media_path():
     print("%" * 80)
     print("\n\n")
 
+#配置运行参数，初始化Runner()，并运行run()
 if __name__ == "__main__":
     # config parameters
     # -----------------
@@ -517,7 +525,8 @@ if __name__ == "__main__":
     run_config = [
         (Runner.CORE_FINE_GRAIN,
          PerfMon.LEVEL_LOW,
-         ("mem", "*", "DWOL", "80", "directio")),
+         ("ssd", "ext4", "DWOL", "5", "bufferedio")),
+         #("mem", "*", "DWOL", "80", "directio")),#分别配置(存储设备，文件系统，测试，核数，directio | bufferedio)
         # ("mem", "tmpfs", "filebench_varmail", "32", "directio")),
         # (Runner.CORE_COARSE_GRAIN,
         #  PerfMon.LEVEL_PERF_RECORD,
@@ -528,7 +537,7 @@ if __name__ == "__main__":
         #  ("*", "*", "*", str(cpupol.PHYSICAL_CHIPS * cpupol.CORE_PER_CHIP), "*"))
     ]
 
-    confirm_media_path()
+    confirm_media_path()    #打印确认信息
     for c in run_config:
         runner = Runner(c[0], c[1], c[2])
         runner.run()

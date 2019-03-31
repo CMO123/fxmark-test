@@ -33,7 +33,8 @@ struct bench {
 	unsigned int duration;
 	int	directio;
 	struct worker *workers; 
-	struct bench_operations ops;
+	struct bench_operations ops;//其中ops记录了实际的microbench。对于每个microbench，pre_work指向的函数完成测试前的准备工作，主要用于准备测试文件。
+	//main_work指向测试函数，post_work指向的函数完成结束后的收尾工作
 	char profile_start_cmd[BENCH_PROFILE_CMD_BYTES];
 	char profile_stop_cmd[BENCH_PROFILE_CMD_BYTES];
 	char profile_stat_file[PATH_MAX];

@@ -43,12 +43,16 @@ rdtsc_beg(void)
 static inline uint64_t __attribute__((__always_inline__))
 rdtsc_end(void)
 {
+
     barrier();
+
     uint32_t a, d;
     __asm __volatile("rdtscp; mov %%eax, %0; mov %%edx, %1; cpuid"
                      : "=r" (a), "=r" (d)
                      : : "%rax", "%rbx", "%rcx", "%rdx");
+
     barrier();
+
     return ((uint64_t) a) | (((uint64_t) d) << 32);
 }
 
